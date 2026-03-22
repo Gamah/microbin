@@ -159,7 +159,7 @@ pub struct Args {
     #[clap(long, env = "MICROBIN_DEFAULT_VIEW", default_value = "gallery")]
     pub default_view: String,
 
-    #[clap(long, env = "MICROBIN_INLINE_MEDIA")]
+    #[clap(long, env = "MICROBIN_INLINE_MEDIA", action = clap::ArgAction::Set, default_value_t = false)]
     pub inline_media: bool,
 }
 
