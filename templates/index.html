@@ -1,4 +1,5 @@
 {% include "header.html" %}
+<div id="drop-overlay" aria-hidden="true">Drop files anywhere to attach</div>
 <form id="pasta-form" action="{{ args.public_path_as_str() }}/upload" method="POST" enctype="multipart/form-data">
     <br>
     <div id="settings">
@@ -253,7 +254,7 @@
         <div id="file-select">
             {% if !args.no_file_upload %}
             <label for="file" id="attach-file-button-label">
-                <a role="button" id="attach-file-button">Select or drop file attachment</a>
+                <a role="button" id="attach-file-button">Select file attachment (or drop anywhere on page)</a>
             </label>
             <br>
             <input type="file" id="file" name="file" multiple />
@@ -544,28 +545,46 @@
         fileOversized();
     });
 
-    dropContainer.ondragover = dropContainer.ondragenter = function (evt) {
-        evt.preventDefault();
-        if (hiddenFileButton.files.length == 0) {
-            attachFileButton.textContent = "Drop your file here";
-        } else {
-            attachFileButton.textContent = "Drop your file here to replace " + hiddenFileButton.files[0].name;
-        }
-    };
+    const dropOverlay = document.getElementById('drop-overlay');
+    let dragCounter = 0;
 
-    dropContainer.ondrop = function (evt) {
+    document.addEventListener('dragenter', function (evt) {
+        if (![...(evt.dataTransfer?.types ?? [])].includes('Files')) return;
+        evt.preventDefault();
+        dragCounter++;
+        dropOverlay.classList.add('active');
+    });
+
+    document.addEventListener('dragleave', function (evt) {
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            dropOverlay.classList.remove('active');
+        }
+    });
+
+    document.addEventListener('dragover', function (evt) {
+        if (![...(evt.dataTransfer?.types ?? [])].includes('Files')) return;
+        evt.preventDefault();
+    });
+
+    document.addEventListener('drop', function (evt) {
+        evt.preventDefault();
+        dragCounter = 0;
+        dropOverlay.classList.remove('active');
+        if (!evt.dataTransfer?.files.length) return;
         const dataTransfer = new DataTransfer();
         for (let i = 0; i < evt.dataTransfer.files.length; i++) {
-             dataTransfer.items.add(evt.dataTransfer.files[i]);
+            dataTransfer.items.add(evt.dataTransfer.files[i]);
         }
         hiddenFileButton.files = dataTransfer.files;
         if (hiddenFileButton.files.length > 1) {
-             attachFileButton.textContent = "Attached: " + hiddenFileButton.files.length + " files";
+            attachFileButton.textContent = "Attached: " + hiddenFileButton.files.length + " files";
         } else {
-             attachFileButton.textContent = "Attached: " + hiddenFileButton.files[0].name;
+            attachFileButton.textContent = "Attached: " + hiddenFileButton.files[0].name;
         }
-        evt.preventDefault();
-    };
+        fileOversized();
+    });
 
     document.addEventListener('paste', function (evt) {
         const items = evt.clipboardData?.items;
@@ -684,6 +703,26 @@
 
     #file {
         display: none;
+    }
+
+    #drop-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(41, 117, 210, 0.15);
+        border: 4px dashed #2975D2;
+        border-radius: 8px;
+        pointer-events: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        font-weight: bold;
+        color: #2975D2;
+    }
+
+    #drop-overlay.active {
+        display: flex;
     }
 </style>
 
