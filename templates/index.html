@@ -1,5 +1,4 @@
 {% include "header.html" %}
-<div id="drop-overlay" aria-hidden="true">Drop files anywhere to attach</div>
 <form id="pasta-form" action="{{ args.public_path_as_str() }}/upload" method="POST" enctype="multipart/form-data">
     <br>
     <div id="settings">
@@ -254,9 +253,10 @@
         <div id="file-select">
             {% if !args.no_file_upload %}
             <label for="file" id="attach-file-button-label">
-                <a role="button" id="attach-file-button">Select file attachment (or drop anywhere on page)</a>
+                <a role="button" id="attach-file-button">Select file attachment (or drop/paste anywhere on page)</a>
             </label>
             <br>
+            <ul id="file-list" style="margin: 4px 0 0 0; padding: 0; list-style: none; font-size: 0.9em;"></ul>
             <input type="file" id="file" name="file" multiple />
             {% endif %}
         </div>
@@ -536,60 +536,70 @@
         }
     }
 
-    hiddenFileButton.addEventListener('change', function () {
-        if (this.files.length > 1) {
-            attachFileButton.textContent = "Attached: " + this.files.length + " files";
-        } else if (this.files.length === 1) {
-            attachFileButton.textContent = "Attached: " + this.files[0].name;
+    function updateFileList() {
+        const fileList = document.getElementById('file-list');
+        fileList.innerHTML = '';
+        for (let i = 0; i < hiddenFileButton.files.length; i++) {
+            const li = document.createElement('li');
+            li.textContent = hiddenFileButton.files[i].name;
+            fileList.appendChild(li);
         }
+    }
+
+    function addFiles(newFiles) {
+        const existingFiles = Array.from(hiddenFileButton.files);
+        const dataTransfer = new DataTransfer();
+        for (const file of existingFiles) {
+            dataTransfer.items.add(file);
+        }
+        let added = 0;
+        for (const newFile of newFiles) {
+            const isDuplicate = existingFiles.some(f =>
+                f.size === newFile.size &&
+                f.name === newFile.name &&
+                f.type === newFile.type
+            );
+            if (!isDuplicate) {
+                dataTransfer.items.add(newFile);
+                added++;
+            }
+        }
+        if (added === 0) return;
+        hiddenFileButton.files = dataTransfer.files;
+        updateFileList();
+        fileOversized();
+    }
+
+    hiddenFileButton.addEventListener('change', function () {
+        updateFileList();
         fileOversized();
     });
 
-    const dropOverlay = document.getElementById('drop-overlay');
-    let dragCounter = 0;
+    function dragHasFiles(evt) {
+        return [...(evt.dataTransfer?.types ?? [])].includes('Files');
+    }
 
     document.addEventListener('dragenter', function (evt) {
-        if (![...(evt.dataTransfer?.types ?? [])].includes('Files')) return;
+        if (!dragHasFiles(evt)) return;
         evt.preventDefault();
-        dragCounter++;
-        dropOverlay.classList.add('active');
-    });
-
-    document.addEventListener('dragleave', function (evt) {
-        dragCounter--;
-        if (dragCounter <= 0) {
-            dragCounter = 0;
-            dropOverlay.classList.remove('active');
-        }
-    });
+    }, { capture: true });
 
     document.addEventListener('dragover', function (evt) {
-        if (![...(evt.dataTransfer?.types ?? [])].includes('Files')) return;
+        if (!dragHasFiles(evt)) return;
         evt.preventDefault();
-    });
+        evt.dataTransfer.dropEffect = 'copy';
+    }, { capture: true });
 
     document.addEventListener('drop', function (evt) {
-        evt.preventDefault();
-        dragCounter = 0;
-        dropOverlay.classList.remove('active');
         if (!evt.dataTransfer?.files.length) return;
-        const dataTransfer = new DataTransfer();
-        for (let i = 0; i < evt.dataTransfer.files.length; i++) {
-            dataTransfer.items.add(evt.dataTransfer.files[i]);
-        }
-        hiddenFileButton.files = dataTransfer.files;
-        if (hiddenFileButton.files.length > 1) {
-            attachFileButton.textContent = "Attached: " + hiddenFileButton.files.length + " files";
-        } else {
-            attachFileButton.textContent = "Attached: " + hiddenFileButton.files[0].name;
-        }
-        fileOversized();
-    });
+        evt.preventDefault();
+        evt.stopPropagation();
+        addFiles(Array.from(evt.dataTransfer.files));
+    }, { capture: true });
 
     document.addEventListener('paste', function (evt) {
         const items = evt.clipboardData?.items;
         if (!items) return;
-
         const pastedFiles = [];
         for (let i = 0; i < items.length; i++) {
             if (items[i].kind === 'file') {
@@ -597,46 +607,9 @@
                 if (file) pastedFiles.push(file);
             }
         }
-
         if (pastedFiles.length === 0) return;
-
         evt.preventDefault();
-
-        const dataTransfer = new DataTransfer();
-
-        const existingFiles = Array.from(hiddenFileButton.files);
-        for (const file of existingFiles) {
-            dataTransfer.items.add(file);
-        }
-
-        // Add pasted files, skipping duplicates (same size + type already attached)
-        let added = 0;
-        for (const newFile of pastedFiles) {
-            // Check if this exact file (size + name + type) is already there
-            const isDuplicate = existingFiles.some(oldFile => 
-                oldFile.size === newFile.size && 
-                oldFile.name === newFile.name && 
-                oldFile.type === newFile.type
-            );
-
-            if (!isDuplicate) {
-                // We keep the original 'newFile' object to preserve the filename
-                dataTransfer.items.add(newFile);
-                added++;
-            }
-        }
-
-        if (added === 0) return;
-
-        hiddenFileButton.files = dataTransfer.files;
-
-        if (hiddenFileButton.files.length > 1) {
-            attachFileButton.textContent = "Attached: " + hiddenFileButton.files.length + " files";
-        } else if (hiddenFileButton.files.length === 1) {
-            attachFileButton.textContent = "Attached: " + hiddenFileButton.files[0].name;
-        }
-
-        fileOversized();
+        addFiles(pastedFiles);
     });
     // {%- endif %}
 
@@ -645,6 +618,10 @@
 <style>
     input::file-selector-button {
         display: none;
+    }
+
+    #file {
+        pointer-events: none;
     }
 
     #settings {
@@ -705,25 +682,7 @@
         display: none;
     }
 
-    #drop-overlay {
-        display: none;
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        background: rgba(41, 117, 210, 0.15);
-        border: 4px dashed #2975D2;
-        border-radius: 8px;
-        pointer-events: none;
-        align-items: center;
-        justify-content: center;
-        font-size: 2rem;
-        font-weight: bold;
-        color: #2975D2;
-    }
 
-    #drop-overlay.active {
-        display: flex;
-    }
 </style>
 
 {% include "footer.html" %}
