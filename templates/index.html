@@ -549,7 +549,7 @@
     let dragCounter = 0;
 
     document.addEventListener('dragenter', function (evt) {
-        if (!evt.dataTransfer?.types.includes('Files')) return;
+        if (![...(evt.dataTransfer?.types ?? [])].includes('Files')) return;
         evt.preventDefault();
         dragCounter++;
         dropOverlay.classList.add('active');
@@ -564,7 +564,7 @@
     });
 
     document.addEventListener('dragover', function (evt) {
-        if (!evt.dataTransfer?.types.includes('Files')) return;
+        if (![...(evt.dataTransfer?.types ?? [])].includes('Files')) return;
         evt.preventDefault();
     });
 
